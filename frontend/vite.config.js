@@ -51,6 +51,13 @@ export default defineConfig({
             type: 'image/png',
             form_factor: 'wide',
             label: 'MoneySuivi Dashboard'
+          },
+          {
+            src: '/screenshot-narrow.png',
+            sizes: '500x750',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'MoneySuivi Mobile Login'
           }
         ]
       },
