@@ -5,9 +5,9 @@
     ],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.moneysuivi.app",
+      "package_name": "com.onrender.smartexpencetracker_frontend.twa",
       "sha256_cert_fingerprints": [
-        "YOUR_SHA256_FINGERPRINT_HERE"
+        "12:FE:05:5C:94:E7:25:A7:A7:14:2E:D0:32:83:87:20:E2:3B:FF:49:FF:32:DA:4C:E4:AB:A1:7D:0A:03:51:A3"
       ]
     }
   }
