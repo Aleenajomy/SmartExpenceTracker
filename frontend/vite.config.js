@@ -14,12 +14,21 @@ export default defineConfig({
         name: 'MoneySuivi',
         short_name: 'MoneySuivi',
         description: 'One finance ecosystem for budgets, expenses, EMIs, net worth and notifications',
+        id: '/',
         theme_color: '#0EA5E9',
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
         scope: '/',
+        prefer_related_applications: true,
+        related_applications: [
+          {
+            platform: 'play',
+            url: 'https://play.google.com/store/apps/details?id=com.onrender.smartexpencetracker_frontend.twa',
+            id: 'com.onrender.smartexpencetracker_frontend.twa'
+          }
+        ],
         icons: [
           {
             src: '/icon-192x192.png',
