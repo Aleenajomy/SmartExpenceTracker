@@ -33,6 +33,16 @@ export default defineConfig({
             type: 'image/png',
             purpose: 'any maskable'
           }
+        ],
+        categories: ['finance', 'utilities'],
+        screenshots: [
+          {
+            src: '/screenshot-mobile.png',
+            sizes: '1920x912',
+            type: 'image/png',
+            form_factor: 'wide',
+            label: 'MoneySuivi Dashboard'
+          }
         ]
       },
       devOptions: {
