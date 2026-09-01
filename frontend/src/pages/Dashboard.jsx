@@ -21,13 +21,12 @@ const budgetColor = (pct) => {
 }
 
 const getDisplayBalances = (analytics) => {
-  const cash = Math.max(0, Number(analytics.cashBalance || 0))
-  const upi = Math.max(0, Number(analytics.upiBalance || 0))
-  const creditCard = Number(analytics.creditCardBalance || 0) // Credit card can be negative (money owed)
-  const debitCard = Math.max(0, Number(analytics.debitCardBalance || 0))
-  const netBanking = Math.max(0, Number(analytics.netBankingBalance || 0))
-  const breakdown = cash + upi + creditCard + debitCard + netBanking
-  const total = breakdown !== 0 ? Math.max(0, breakdown) : Math.max(0, Number(analytics.totalBalance ?? analytics.balance ?? 0))
+  const cash = Number(analytics.cashBalance || 0)
+  const upi = Number(analytics.upiBalance || 0)
+  const creditCard = Number(analytics.creditCardBalance || 0)
+  const debitCard = Number(analytics.debitCardBalance || 0)
+  const netBanking = Number(analytics.netBankingBalance || 0)
+  const total = Number(analytics.totalBalance ?? analytics.balance ?? (cash + upi + creditCard + debitCard + netBanking))
   return { cash, upi, creditCard, debitCard, netBanking, total }
 }
 

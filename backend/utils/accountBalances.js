@@ -1,6 +1,6 @@
 const PAYMENT_BUCKETS = ['Cash', 'UPI', 'Credit Card', 'Debit Card', 'Net Banking'];
-const ACCOUNT_TYPES = ['Cash', 'Bank', 'UPI', 'Credit Card', 'Wallet'];
-const BALANCE_ACCOUNTS = ['Cash', 'Bank', 'Wallet'];
+const ACCOUNT_TYPES = ['Cash', 'Bank', 'UPI', 'Credit Card', 'Wallet', 'Debit Card', 'Net Banking'];
+const BALANCE_ACCOUNTS = ['Cash', 'Bank', 'UPI', 'Wallet', 'Credit Card', 'Debit Card', 'Net Banking'];
 
 const normalizePaymentMethod = (value) => {
   const raw = String(value || '').trim().toLowerCase();
@@ -8,27 +8,33 @@ const normalizePaymentMethod = (value) => {
   if (raw === 'credit card') return 'Credit Card';
   if (raw === 'debit card') return 'Debit Card';
   if (raw === 'net banking' || raw === 'bank transfer' || raw === 'bank') return 'Net Banking';
-  return 'Cash';
+  if (raw === 'cash') return 'Cash';
+  return 'Net Banking';
 };
 
 const normalizeAccountType = (value, fallback = 'Cash') => {
   const raw = String(value || fallback).trim().toLowerCase();
   if (raw === 'upi') return 'UPI';
   if (raw === 'credit card') return 'Credit Card';
-  if (raw === 'wallet') return 'Wallet';
-  if (['bank', 'bank transfer', 'debit card', 'net banking'].includes(raw)) return 'Bank';
+  if (raw === 'wallet') return 'UPI';
+  if (raw === 'debit card') return 'Debit Card';
+  if (raw === 'net banking' || raw === 'bank' || raw === 'bank transfer') return 'Bank';
+  if (raw === 'cash') return 'Cash';
   return 'Cash';
 };
 
 const balanceBucketFor = (accountType) => {
-  const normalized = normalizeAccountType(accountType);
-  if (normalized === 'UPI') return 'Bank';
-  if (normalized === 'Cash' || normalized === 'Bank' || normalized === 'Wallet') return normalized;
-  return null;
+  const raw = String(accountType || '').trim().toLowerCase();
+  if (raw === 'cash') return 'Cash';
+  if (raw === 'upi' || raw === 'wallet') return 'UPI';
+  if (raw === 'credit card') return 'Credit Card';
+  if (raw === 'debit card') return 'Debit Card';
+  if (raw === 'net banking' || raw === 'bank' || raw === 'bank transfer') return 'Net Banking';
+  return 'Cash';
 };
 
 const inferTransactionAccountType = (transaction) => {
-  return normalizeAccountType(transaction.accountType);
+  return normalizeAccountType(transaction.accountType || transaction.paymentMethod);
 };
 
 const emptyBalances = () => ({
@@ -37,22 +43,18 @@ const emptyBalances = () => ({
   creditCardBalance: 0,
   debitCardBalance: 0,
   netBankingBalance: 0,
+  bankBalance: 0,
   totalBalance: 0,
 });
 
 const addToPaymentBucket = (balances, method, amount) => {
-  if (method === 'Cash') balances.cashBalance += amount;
-  else if (method === 'UPI') balances.upiBalance += amount;
-  else if (method === 'Credit Card') balances.creditCardBalance += amount;
-  else if (method === 'Debit Card') balances.debitCardBalance += amount;
-  else if (method === 'Net Banking') balances.netBankingBalance += amount;
-};
-
-// Keep legacy addToBucket for transfer support
-const addToBucket = (balances, bucket, amount) => {
+  const bucket = balanceBucketFor(method);
   if (bucket === 'Cash') balances.cashBalance += amount;
-  if (bucket === 'Bank') { balances.debitCardBalance += amount; }
-  if (bucket === 'Wallet') balances.upiBalance += amount;
+  else if (bucket === 'UPI') balances.upiBalance += amount;
+  else if (bucket === 'Credit Card') balances.creditCardBalance += amount;
+  else if (bucket === 'Debit Card') balances.debitCardBalance += amount;
+  else if (bucket === 'Net Banking') balances.netBankingBalance += amount;
+  else balances.cashBalance += amount;
 };
 
 const calculateBalances = (transactions = []) => {
@@ -60,18 +62,25 @@ const calculateBalances = (transactions = []) => {
 
   transactions.forEach((transaction) => {
     const amount = Number(transaction.amount || 0);
-    if (!amount) return;
+    if (!amount || isNaN(amount)) return;
 
     if (transaction.type === 'transfer') {
-      addToBucket(balances, balanceBucketFor(transaction.fromAccountType), -amount);
-      addToBucket(balances, balanceBucketFor(transaction.toAccountType), amount);
+      const fromBucket = balanceBucketFor(transaction.fromAccountType || 'Bank');
+      const toBucket = balanceBucketFor(transaction.toAccountType || 'Cash');
+      addToPaymentBucket(balances, fromBucket, -amount);
+      addToPaymentBucket(balances, toBucket, amount);
       return;
     }
 
-    const method = normalizePaymentMethod(transaction.paymentMethod || transaction.accountType);
+    const method = transaction.paymentMethod || transaction.accountType || 'Cash';
     const delta = transaction.type === 'income' ? amount : -amount;
     addToPaymentBucket(balances, method, delta);
   });
+
+  balances.bankBalance =
+    balances.upiBalance +
+    balances.debitCardBalance +
+    balances.netBankingBalance;
 
   balances.totalBalance =
     balances.cashBalance +
@@ -79,6 +88,7 @@ const calculateBalances = (transactions = []) => {
     balances.debitCardBalance +
     balances.netBankingBalance +
     balances.creditCardBalance;
+
   return balances;
 };
 
@@ -101,3 +111,4 @@ module.exports = {
   calculateBalances,
   buildBalanceAlerts,
 };
+

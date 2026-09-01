@@ -98,7 +98,7 @@ export default function NetWorth() {
         <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest mb-1">Final Net Worth</p>
         <p className="text-4xl font-black text-white mb-2 tracking-tight">{formatCurrency(netWorth)}</p>
         <p className="text-white/60 text-[10px] font-semibold mt-1">
-          Formula: Assets ({formatCurrency(summary.totalAssets)}) + Cash ({formatCurrency(summary.cashBalance || 0)}) + Receivables ({formatCurrency(summary.ledgerReceivable || 0)}) − Liabilities ({formatCurrency(summary.totalLiabilities)})
+          Formula: Assets ({formatCurrency(summary.totalAssets)}) + Liquid Balance ({formatCurrency(summary.cashBalance || 0)}) + Receivables ({formatCurrency(summary.ledgerReceivable || 0)}) − Liabilities ({formatCurrency(summary.totalLiabilities)})
         </p>
       </div>
 
@@ -115,10 +115,10 @@ export default function NetWorth() {
           <p className="text-base md:text-lg font-black dark:text-white text-slate-800 mt-3">{formatCurrency(summary.totalAssets)}</p>
         </div>
 
-        {/* Cash Balance Card */}
+        {/* Liquid Balance Card */}
         <div className="card p-4 flex flex-col justify-between border dark:border-dark-border border-light-border bg-white dark:bg-dark-card shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex justify-between items-start">
-            <span className="text-[10px] dark:text-gray-500 text-gray-400 uppercase font-bold tracking-wider">Cash Balance</span>
+            <span className="text-[10px] dark:text-gray-500 text-gray-400 uppercase font-bold tracking-wider">Liquid Balance</span>
             <span className="w-7 h-7 rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center">
               <Wallet size={14} />
             </span>

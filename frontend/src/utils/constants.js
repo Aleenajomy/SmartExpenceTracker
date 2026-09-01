@@ -1,8 +1,8 @@
 export const CATEGORIES = ['Food', 'Travel', 'Shopping', 'Bills', 'Entertainment', 'Salary', 'Healthcare', 'Other']
 export const INCOME_CATEGORIES = ['Salary', 'Freelance', 'Investment', 'Gift', 'Other']
 export const EXPENSE_CATEGORIES = ['Food', 'Travel', 'Shopping', 'Bills', 'Entertainment', 'Healthcare', 'Other']
-export const PAYMENT_METHODS = ['Cash', 'UPI', 'Credit Card', 'Debit Card', 'Other']
-export const ACCOUNT_TYPES = ['Cash', 'Bank', 'UPI', 'Wallet', 'Credit Card']
+export const PAYMENT_METHODS = ['Bank', 'UPI', 'Cash', 'Credit Card', 'Debit Card', 'Net Banking', 'Other']
+export const ACCOUNT_TYPES = ['Bank', 'UPI', 'Cash', 'Credit Card', 'Debit Card', 'Net Banking']
 
 export const CATEGORY_ICONS = {
   Food: 'Utensils',

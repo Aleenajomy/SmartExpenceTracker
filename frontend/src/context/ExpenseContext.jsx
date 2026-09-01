@@ -72,6 +72,7 @@ export function ExpenseProvider({ children }) {
     setExpenses(prev => prev.filter(e => e._id !== id))
     toast.success('Transaction deleted')
     fetchAnalytics()
+    fetchExpenses({ page: 1 })
   }
 
   const applyFilter = (key, value) => {

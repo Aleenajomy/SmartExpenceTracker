@@ -56,18 +56,21 @@ const getExpense = async (req, res) => {
 
 const createExpense = async (req, res) => {
   try {
-    const { title, amount, category, type, accountType, paymentMethod, note, expenseDate, recurring, recurringType } = req.body;
+    const { title, amount, category, type, accountType, fromAccountType, toAccountType, paymentMethod, note, expenseDate, recurring, recurringType } = req.body;
     const date = expenseDate ? new Date(expenseDate) : new Date();
     const isRecurring = Boolean(recurring);
-    const normalizedType = type === 'income' ? 'income' : 'expense';
-    const normalizedAccountType = normalizeAccountType(accountType || paymentMethod);
+    const normalizedType = type === 'income' ? 'income' : (type === 'transfer' ? 'transfer' : 'expense');
+    const normalizedAccountType = normalizeAccountType(accountType || paymentMethod || fromAccountType);
     const expense = await prisma.expense.create({
       data: {
-        title, category,
+        title,
+        category: category || (normalizedType === 'transfer' ? 'Transfer' : 'Other'),
         amount: Number(amount),
         type: normalizedType,
         accountType: normalizedAccountType,
-        paymentMethod: paymentMethod || 'UPI',
+        fromAccountType: fromAccountType || null,
+        toAccountType: toAccountType || null,
+        paymentMethod: paymentMethod || (normalizedType === 'transfer' ? 'Transfer' : 'UPI'),
         note: note || null,
         expenseDate: date,
         userId: req.user.id,
@@ -76,7 +79,7 @@ const createExpense = async (req, res) => {
         nextRunDate: isRecurring ? calcNextRunDate(date, recurringType) : null,
       },
     });
-    const notification = normalizedType === 'expense' ? await checkBudgetAlert(req.user.id, category) : null;
+    const notification = normalizedType === 'expense' && category ? await checkBudgetAlert(req.user.id, category) : null;
     res.status(201).json({ success: true, message: 'Expense added successfully', expense: toExpenseResponse(expense), notification });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -88,9 +91,11 @@ const updateExpense = async (req, res) => {
     const existing = await prisma.expense.findFirst({ where: { id: req.params.id, userId: req.user.id } });
     if (!existing) return res.status(404).json({ success: false, message: 'Expense not found' });
     const data = {};
-    const fields = ['title', 'category', 'paymentMethod', 'note'];
+    const fields = ['title', 'category', 'paymentMethod', 'note', 'fromAccountType', 'toAccountType'];
     fields.forEach(f => { if (req.body[f] !== undefined) data[f] = req.body[f]; });
-    if (req.body.type !== undefined) data.type = req.body.type === 'income' ? 'income' : 'expense';
+    if (req.body.type !== undefined) {
+      data.type = req.body.type === 'income' ? 'income' : (req.body.type === 'transfer' ? 'transfer' : 'expense');
+    }
     if (req.body.accountType !== undefined) data.accountType = normalizeAccountType(req.body.accountType);
     if (req.body.amount !== undefined) data.amount = Number(req.body.amount);
     if (req.body.expenseDate !== undefined) data.expenseDate = new Date(req.body.expenseDate);

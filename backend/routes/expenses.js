@@ -17,10 +17,12 @@ const { validate } = require('../middleware/validate');
 const expenseRules = [
   body('title').trim().notEmpty().withMessage('Title is required'),
   body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0'),
-  body('category').notEmpty().withMessage('Category is required'),
+  body('category').optional(),
   body('expenseDate').notEmpty().withMessage('Date is required'),
-  body('type').optional().isIn(['expense', 'income']).withMessage('Type must be expense or income'),
-  body('accountType').optional().isIn(['Cash', 'Bank', 'UPI', 'Credit Card', 'Wallet']).withMessage('Invalid account type'),
+  body('type').optional().isIn(['expense', 'income', 'transfer']).withMessage('Type must be expense, income, or transfer'),
+  body('accountType').optional().isIn(['Cash', 'Bank', 'UPI', 'Credit Card', 'Wallet', 'Debit Card', 'Net Banking']).withMessage('Invalid account type'),
+  body('fromAccountType').optional(),
+  body('toAccountType').optional(),
   body('recurring').optional().isBoolean().withMessage('Recurring must be true or false'),
   body('recurringType').custom((value, { req }) => {
     if (req.body.recurring === true || req.body.recurring === 'true') {

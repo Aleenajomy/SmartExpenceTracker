@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Repeat, Utensils, Bus, ShoppingBag, Receipt, Tv, Banknote, HeartPulse, Briefcase, TrendingUp, Gift, CircleDot } from 'lucide-react'
+import { Repeat, Utensils, Bus, ShoppingBag, Receipt, Tv, Banknote, HeartPulse, Briefcase, TrendingUp, Gift, CircleDot, ArrowRightLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useExpense } from '../context/ExpenseContext'
 import { useBudget } from '../context/BudgetContext'
+import { useNetWorth } from '../context/NetWorthContext'
 import api from '../services/api'
 import {
   CATEGORIES,
@@ -18,9 +19,13 @@ import {
 const today = new Date().toISOString().split('T')[0]
 
 const accountTypeForPayment = (paymentMethod) => {
-  if (paymentMethod === 'UPI' || paymentMethod === 'Debit Card' || paymentMethod === 'Net Banking') return 'Bank'
-  if (paymentMethod === 'Credit Card') return 'Credit Card'
-  return 'Cash'
+  const m = String(paymentMethod || '').trim().toLowerCase()
+  if (m === 'cash') return 'Cash'
+  if (m === 'credit card') return 'Credit Card'
+  if (m === 'upi' || m === 'wallet') return 'UPI'
+  if (m === 'debit card') return 'Debit Card'
+  if (m === 'net banking' || m === 'bank' || m === 'bank transfer') return 'Bank'
+  return 'Bank'
 }
 
 const defaultForm = {
@@ -29,7 +34,9 @@ const defaultForm = {
   category: CATEGORIES[0],
   type: 'expense',
   accountType: 'Bank',
-  paymentMethod: 'UPI',
+  fromAccountType: 'Bank',
+  toAccountType: 'Cash',
+  paymentMethod: 'Bank',
   note: '',
   expenseDate: today,
   recurring: false,
@@ -43,6 +50,7 @@ export default function AddExpense() {
   const navigate = useNavigate()
   const { addExpense, updateExpense } = useExpense()
   const { budgets, fetchBudgets } = useBudget()
+  const { fetchNetWorth } = useNetWorth()
   const [form, setForm] = useState(defaultForm)
   const [loading, setLoading] = useState(false)
   const [customizeTitle, setCustomizeTitle] = useState(false)
@@ -56,19 +64,22 @@ export default function AddExpense() {
     api.get(`/expenses/${id}`).then(res => {
       const e = res.data.expense
       const isInc = e.type === 'income'
+      const isTrf = e.type === 'transfer'
       setForm({
         title: e.title,
         amount: e.amount,
-        category: e.category,
-        type: isInc ? 'income' : 'expense',
+        category: e.category || (isTrf ? 'Transfer' : isInc ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]),
+        type: e.type || 'expense',
         accountType: e.accountType || e.paymentMethod || ACCOUNT_TYPES[0],
-        paymentMethod: e.paymentMethod,
+        fromAccountType: e.fromAccountType || 'Bank',
+        toAccountType: e.toAccountType || 'Cash',
+        paymentMethod: e.paymentMethod || 'Bank',
         note: e.note || '',
-        expenseDate: e.expenseDate.split('T')[0],
+        expenseDate: e.expenseDate ? e.expenseDate.split('T')[0] : today,
         recurring: Boolean(e.recurring),
         recurringType: e.recurringType || 'monthly',
       })
-      if (isInc && (e.title !== e.category || e.category === 'Other')) {
+      if ((isInc || isTrf) && (e.title !== e.category || e.category === 'Other')) {
         setCustomizeTitle(true)
       }
     }).catch(() => toast.error('Failed to load transaction'))
@@ -77,7 +88,7 @@ export default function AddExpense() {
   useEffect(() => {
     if (isEditing) return
     const type = searchParams.get('type')
-    if (type === 'income' || type === 'expense') {
+    if (type === 'income' || type === 'expense' || type === 'transfer') {
       handleTypeChange(type)
     }
   }, [isEditing, searchParams])
@@ -106,19 +117,20 @@ export default function AddExpense() {
   const handleCustomizeTitleToggle = (val) => {
     setCustomizeTitle(val)
     if (val && !form.title.trim()) {
-      setForm(prev => ({ ...prev, title: prev.category }))
+      setForm(prev => ({ ...prev, title: prev.type === 'transfer' ? `Transfer to ${prev.toAccountType}` : prev.category }))
     }
   }
 
   const handleTypeChange = (type) => {
     const cats = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
-    const newCategory = cats[0]
+    const newCategory = type === 'transfer' ? 'Transfer' : cats[0]
     setForm(prev => ({
       ...prev,
       type,
       category: newCategory,
-      title: type === 'income' && !customizeTitle && newCategory !== 'Other' ? newCategory : prev.title,
-      accountType: type === 'expense' ? accountTypeForPayment(prev.paymentMethod) : prev.accountType,
+      title: type === 'income' && !customizeTitle && newCategory !== 'Other'
+        ? newCategory
+        : (type === 'transfer' && !customizeTitle ? `Transfer ${prev.fromAccountType} to ${prev.toAccountType}` : prev.title),
       recurring: type === 'expense' ? prev.recurring : false,
     }))
     if (type === 'expense') {
@@ -138,7 +150,15 @@ export default function AddExpense() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     let finalTitle = form.title.trim()
-    if (form.type === 'income') {
+
+    if (form.type === 'transfer') {
+      if (form.fromAccountType === form.toAccountType) {
+        return toast.error('From and To accounts must be different')
+      }
+      if (!customizeTitle || !finalTitle) {
+        finalTitle = `Transfer ${form.fromAccountType} to ${form.toAccountType}`
+      }
+    } else if (form.type === 'income') {
       if (!customizeTitle && form.category !== 'Other') {
         finalTitle = form.category
       } else {
@@ -153,18 +173,28 @@ export default function AddExpense() {
     setLoading(true)
     try {
       const isExpense = form.type === 'expense'
+      const isTransfer = form.type === 'transfer'
+
       const data = {
-        ...form,
         title: finalTitle,
         amount: Number(form.amount),
-        paymentMethod: form.paymentMethod,
-        accountType: accountTypeForPayment(form.paymentMethod),
+        type: form.type,
+        category: isTransfer ? 'Transfer' : form.category,
+        paymentMethod: isTransfer ? form.fromAccountType : form.paymentMethod,
+        accountType: isTransfer ? form.fromAccountType : accountTypeForPayment(form.paymentMethod),
+        fromAccountType: isTransfer ? form.fromAccountType : undefined,
+        toAccountType: isTransfer ? form.toAccountType : undefined,
+        expenseDate: form.expenseDate,
+        note: form.note,
         recurring: isExpense && form.recurring,
         recurringType: isExpense && form.recurring ? form.recurringType : undefined,
       }
+
       if (isEditing) await updateExpense(id, data)
       else await addExpense(data)
+
       await fetchBudgets()
+      await fetchNetWorth()
       navigate(-1)
     } catch (err) {
       toast.error(err.message || 'Something went wrong')
@@ -175,108 +205,171 @@ export default function AddExpense() {
 
   return (
     <div className="max-w-3xl w-full mx-auto space-y-6">
-        
-        {/* Header */}
-        <div className="animate-fadeIn">
-          <h1 className="text-2xl font-black dark:text-white text-slate-800 tracking-tight">
-            {isEditing ? 'Edit Transaction' : 'New Transaction'}
-          </h1>
-          <p className="text-xs dark:text-gray-500 text-gray-400 mt-0.5">
-            {isEditing ? 'Modify transaction logs' : 'Record a new expense or income'}
-          </p>
-        </div>
+      {/* Header */}
+      <div className="animate-fadeIn">
+        <h1 className="text-2xl font-black dark:text-white text-slate-800 tracking-tight">
+          {isEditing ? 'Edit Transaction' : 'New Transaction'}
+        </h1>
+        <p className="text-xs dark:text-gray-500 text-gray-400 mt-0.5">
+          {isEditing ? 'Modify transaction logs' : 'Record an expense, income, or internal transfer'}
+        </p>
+      </div>
 
-        {/* Form Panel */}
-        <div className="card p-6 sm:p-8 animate-scaleIn">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            
-            {/* Income vs Expense sliding pills */}
-            <div className="card p-1 flex gap-1 bg-slate-100 dark:bg-dark-bg/60 border-none rounded-2xl">
-              {['expense', 'income'].map(type => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => handleTypeChange(type)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                    form.type === type
-                      ? type === 'expense'
-                        ? 'bg-red-500 text-white shadow-md'
-                        : 'bg-emerald-500 text-white shadow-md'
-                      : 'dark:text-gray-500 text-gray-400 hover:text-slate-700 hover:dark:text-white'
-                  }`}
-                >
-                  {type === 'expense' ? 'Expense' : 'Income'}
-                </button>
-              ))}
+      {/* Form Panel */}
+      <div className="card p-6 sm:p-8 animate-scaleIn">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Income vs Expense vs Transfer sliding pills */}
+          <div className="card p-1 flex gap-1 bg-slate-100 dark:bg-dark-bg/60 border-none rounded-2xl">
+            {[
+              { key: 'expense', label: 'Expense', color: 'bg-red-500' },
+              { key: 'income', label: 'Income', color: 'bg-emerald-500' },
+              { key: 'transfer', label: 'Transfer', color: 'bg-sky-500' },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => handleTypeChange(tab.key)}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                  form.type === tab.key
+                    ? `${tab.color} text-white shadow-md`
+                    : 'dark:text-gray-500 text-gray-400 hover:text-slate-700 hover:dark:text-white'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Amount Card Container */}
+          <div className="card p-5 bg-slate-50 dark:bg-dark-bg/25 border-light-border dark:border-dark-border text-center flex flex-col items-center justify-center relative transition-all focus-within:border-sky-500/40">
+            <label className="label text-center block mb-2 text-gray-450 dark:text-gray-550 uppercase tracking-widest font-bold">Transaction Amount</label>
+            <div className="flex items-center justify-center gap-1.5 w-full max-w-[280px]">
+              <span className="text-3xl font-extrabold text-primary flex-shrink-0">₹</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                className="text-4xl font-black dark:text-white text-slate-800 bg-transparent outline-none text-center w-full dark:placeholder-gray-700 placeholder-gray-300"
+                placeholder="0.00"
+                value={form.amount}
+                onChange={set('amount')}
+              />
             </div>
+          </div>
 
-            {/* Amount Card Container */}
-            <div className="card p-5 bg-slate-50 dark:bg-dark-bg/25 border-light-border dark:border-dark-border text-center flex flex-col items-center justify-center relative transition-all focus-within:border-sky-500/40">
-              <label className="label text-center block mb-2 text-gray-450 dark:text-gray-550 uppercase tracking-widest font-bold">Transaction Amount</label>
-              <div className="flex items-center justify-center gap-1.5 w-full max-w-[280px]">
-                <span className="text-3xl font-extrabold text-primary flex-shrink-0">₹</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  required
-                  className="text-4xl font-black dark:text-white text-slate-800 bg-transparent outline-none text-center w-full dark:placeholder-gray-700 placeholder-gray-300"
-                  placeholder="0.00"
-                  value={form.amount}
-                  onChange={set('amount')}
-                />
+          {/* Transfer Accounts Selection */}
+          {form.type === 'transfer' && (
+            <div className="card p-4 bg-slate-50 dark:bg-dark-bg/25 border-light-border dark:border-dark-border space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Transfer From</label>
+                  <select
+                    className="input cursor-pointer"
+                    value={form.fromAccountType}
+                    onChange={set('fromAccountType')}
+                  >
+                    {ACCOUNT_TYPES.map(acc => <option key={acc} value={acc}>{acc}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Transfer To</label>
+                  <select
+                    className="input cursor-pointer"
+                    value={form.toAccountType}
+                    onChange={set('toAccountType')}
+                  >
+                    {ACCOUNT_TYPES.map(acc => <option key={acc} value={acc}>{acc}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Title Input */}
-            {form.type === 'income' ? (
-              <div className="space-y-3">
-                {form.category !== 'Other' && (
-                  <label className="flex items-center gap-2 cursor-pointer w-fit">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 rounded accent-sky-500 cursor-pointer"
-                      checked={customizeTitle}
-                      onChange={(e) => handleCustomizeTitleToggle(e.target.checked)}
-                    />
-                    <span className="text-xs font-semibold dark:text-gray-400 text-gray-500 uppercase tracking-wide">
-                      Customize Title
-                    </span>
-                  </label>
-                )}
+          {/* Title Input */}
+          {form.type === 'income' ? (
+            <div className="space-y-3">
+              {form.category !== 'Other' && (
+                <label className="flex items-center gap-2 cursor-pointer w-fit">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded accent-sky-500 cursor-pointer"
+                    checked={customizeTitle}
+                    onChange={(e) => handleCustomizeTitleToggle(e.target.checked)}
+                  />
+                  <span className="text-xs font-semibold dark:text-gray-400 text-gray-500 uppercase tracking-wide">
+                    Customize Title
+                  </span>
+                </label>
+              )}
 
-                {(customizeTitle || form.category === 'Other') ? (
-                  <div className="animate-slideDown">
-                    <label className="label">Title</label>
-                    <input
-                      className="input"
-                      placeholder="e.g. Freelance project, Gift from friend"
-                      value={form.title}
-                      onChange={set('title')}
-                      required
-                    />
-                  </div>
-                ) : (
-                  <div className="text-xs text-gray-500 dark:text-gray-450 bg-slate-50 dark:bg-dark-bg/25 px-4 py-3.5 rounded-xl border dark:border-dark-border border-light-border flex items-center justify-between transition-all animate-fadeIn">
-                    <span className="font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider text-[10px]">Derived Title</span>
-                    <span className="font-bold dark:text-white text-slate-800">{form.category}</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div>
-                <label className="label">Title</label>
+              {(customizeTitle || form.category === 'Other') ? (
+                <div className="animate-slideDown">
+                  <label className="label">Title</label>
+                  <input
+                    className="input"
+                    placeholder="e.g. Freelance project, Gift from friend"
+                    value={form.title}
+                    onChange={set('title')}
+                    required
+                  />
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 dark:text-gray-450 bg-slate-50 dark:bg-dark-bg/25 px-4 py-3.5 rounded-xl border dark:border-dark-border border-light-border flex items-center justify-between transition-all animate-fadeIn">
+                  <span className="font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider text-[10px]">Derived Title</span>
+                  <span className="font-bold dark:text-white text-slate-800">{form.category}</span>
+                </div>
+              )}
+            </div>
+          ) : form.type === 'transfer' ? (
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer w-fit">
                 <input
-                  className="input"
-                  placeholder="e.g. Lunch, Rent, Grocery"
-                  value={form.title}
-                  onChange={set('title')}
-                  required
+                  type="checkbox"
+                  className="w-4 h-4 rounded accent-sky-500 cursor-pointer"
+                  checked={customizeTitle}
+                  onChange={(e) => handleCustomizeTitleToggle(e.target.checked)}
                 />
-              </div>
-            )}
+                <span className="text-xs font-semibold dark:text-gray-400 text-gray-500 uppercase tracking-wide">
+                  Customize Description
+                </span>
+              </label>
+              {customizeTitle ? (
+                <div className="animate-slideDown">
+                  <label className="label">Description</label>
+                  <input
+                    className="input"
+                    placeholder={`e.g. ATM cash withdrawal, Move to savings`}
+                    value={form.title}
+                    onChange={set('title')}
+                  />
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 dark:text-gray-450 bg-slate-50 dark:bg-dark-bg/25 px-4 py-3.5 rounded-xl border dark:border-dark-border border-light-border flex items-center justify-between transition-all animate-fadeIn">
+                  <span className="font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider text-[10px]">Transfer Flow</span>
+                  <span className="font-bold dark:text-white text-slate-800 flex items-center gap-1.5">
+                    <span>{form.fromAccountType}</span>
+                    <ArrowRightLeft size={13} className="text-sky-500" />
+                    <span>{form.toAccountType}</span>
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <label className="label">Title</label>
+              <input
+                className="input"
+                placeholder="e.g. Lunch, Rent, Grocery"
+                value={form.title}
+                onChange={set('title')}
+                required
+              />
+            </div>
+          )}
 
-            {/* Category Selector Grid */}
+          {/* Category Selector Grid for Expenses & Income */}
+          {form.type !== 'transfer' && (
             <div>
               <label className="label mb-3">Category</label>
               <div className={`grid ${form.type === 'income' ? 'grid-cols-3 sm:grid-cols-5' : 'grid-cols-4 sm:grid-cols-7'} gap-3 bg-slate-50 dark:bg-dark-bg/25 p-4 rounded-2xl border dark:border-dark-border border-light-border`}>
@@ -316,113 +409,120 @@ export default function AddExpense() {
                 })}
               </div>
             </div>
+          )}
 
-            {/* Category Budget Balance Indicator */}
-            {selectedBudget && (
-              <div className="card p-4 bg-slate-50/50 dark:bg-dark-bg/20 border-light-border dark:border-dark-border animate-fadeIn">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-extrabold dark:text-gray-500 text-gray-400 uppercase tracking-widest">Category Balance</p>
-                  <p className="text-[11px] font-bold dark:text-gray-300 text-slate-700">{selectedBudget.percentage}% used</p>
-                </div>
-                <div className="h-2 dark:bg-dark-border bg-slate-200 rounded-full overflow-hidden mb-2">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      selectedBudget.percentage >= 90 ? 'bg-red-500' : selectedBudget.percentage >= 70 ? 'bg-orange-500' : 'bg-emerald-500'
-                    }`} 
-                    style={{ width: `${Math.min(selectedBudget.percentage, 100)}%` }} 
-                  />
-                </div>
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="dark:text-gray-500 text-gray-500 font-semibold">
-                    {formatCurrency(selectedBudget.spent)} spent
-                  </span>
-                  <span className="font-bold dark:text-white text-slate-850">
-                    {formatCurrency(selectedBudget.remaining)} left
-                  </span>
-                </div>
+          {/* Category Budget Balance Indicator */}
+          {selectedBudget && (
+            <div className="card p-4 bg-slate-50/50 dark:bg-dark-bg/20 border-light-border dark:border-dark-border animate-fadeIn">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-extrabold dark:text-gray-500 text-gray-400 uppercase tracking-widest">Category Balance</p>
+                <p className="text-[11px] font-bold dark:text-gray-300 text-slate-700">{selectedBudget.percentage}% used</p>
               </div>
-            )}
+              <div className="h-2 dark:bg-dark-border bg-slate-200 rounded-full overflow-hidden mb-2">
+                <div 
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    selectedBudget.percentage >= 90 ? 'bg-red-500' : selectedBudget.percentage >= 70 ? 'bg-orange-500' : 'bg-emerald-500'
+                  }`} 
+                  style={{ width: `${Math.min(selectedBudget.percentage, 100)}%` }} 
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="dark:text-gray-500 text-gray-500 font-semibold">
+                  {formatCurrency(selectedBudget.spent)} spent
+                </span>
+                <span className="font-bold dark:text-white text-slate-850">
+                  {formatCurrency(selectedBudget.remaining)} left
+                </span>
+              </div>
+            </div>
+          )}
 
-            {/* Payment Method and Date Selection */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Payment Method and Date Selection */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {form.type !== 'transfer' && (
               <div>
                 <label className="label">{form.type === 'income' ? 'Received In' : 'Paid Using'}</label>
                 <select
                   className="input cursor-pointer"
                   value={form.paymentMethod}
-                  onChange={form.type === 'income' ? set('paymentMethod') : handlePaymentChange}
+                  onChange={handlePaymentChange}
                 >
-                  {PAYMENT_METHODS.map(m => <option key={m}>{m}</option>)}
+                  {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="label">Date</label>
-                <input
-                  type="date"
-                  className="input cursor-pointer"
-                  max={today}
-                  value={form.expenseDate}
-                  onChange={set('expenseDate')}
-                />
-              </div>
-            </div>
-
-            {/* Recurring Options */}
-            {form.type === 'expense' && (
-              <div className="card p-4 bg-slate-50/50 dark:bg-dark-bg/20 border-light-border dark:border-dark-border space-y-4">
-                <label className="flex items-center justify-between gap-3 cursor-pointer">
-                  <span className="flex items-center gap-2.5">
-                    <span className="w-8 h-8 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-500 flex-shrink-0">
-                      <Repeat size={16} />
-                    </span>
-                    <span>
-                      <span className="block text-xs font-bold dark:text-white text-slate-800 uppercase tracking-wide">Recurring Transaction</span>
-                      <span className="block text-[10px] dark:text-gray-550 text-gray-500 mt-0.5">Auto-create future charges (rent, subscriptions)</span>
-                    </span>
-                  </span>
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 rounded accent-sky-500 cursor-pointer"
-                    checked={form.recurring}
-                    onChange={setChecked('recurring')}
-                  />
-                </label>
-
-                {form.recurring && (
-                  <div className="pt-3 border-t dark:border-dark-border border-light-border animate-slideDown">
-                    <label className="label">Repeat Interval</label>
-                    <select className="input cursor-pointer" value={form.recurringType} onChange={set('recurringType')}>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
-                  </div>
-                )}
-              </div>
             )}
-
-            {/* Note Input */}
-            <div>
-              <label className="label">Note <span className="normal-case text-gray-500">(optional)</span></label>
-              <textarea
-                className="input resize-none"
-                rows={3}
-                placeholder="Add details, tags, or reminders..."
-                value={form.note}
-                onChange={set('note')}
+            <div className={form.type === 'transfer' ? 'sm:col-span-2' : ''}>
+              <label className="label">Date</label>
+              <input
+                type="date"
+                className="input cursor-pointer"
+                max={today}
+                value={form.expenseDate}
+                onChange={set('expenseDate')}
               />
             </div>
+          </div>
 
-            {/* Submit Action */}
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full py-3.5 rounded-xl text-white font-bold text-sm active:scale-[0.98] transition-all hover:opacity-95 shadow-md ${
-                form.type === 'income' ? 'gradient-green' : 'gradient-blue'
-              }`}
-            >
-              {loading ? 'Saving...' : isEditing ? 'Update Transaction' : 'Add Transaction'}
-            </button>
-          </form>
+          {/* Recurring Options */}
+          {form.type === 'expense' && (
+            <div className="card p-4 bg-slate-50/50 dark:bg-dark-bg/20 border-light-border dark:border-dark-border space-y-4">
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <span className="flex items-center gap-2.5">
+                  <span className="w-8 h-8 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-500 flex-shrink-0">
+                    <Repeat size={16} />
+                  </span>
+                  <span>
+                    <span className="block text-xs font-bold dark:text-white text-slate-800 uppercase tracking-wide">Recurring Transaction</span>
+                    <span className="block text-[10px] dark:text-gray-550 text-gray-500 mt-0.5">Auto-create future charges (rent, subscriptions)</span>
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded accent-sky-500 cursor-pointer"
+                  checked={form.recurring}
+                  onChange={setChecked('recurring')}
+                />
+              </label>
+
+              {form.recurring && (
+                <div className="pt-3 border-t dark:border-dark-border border-light-border animate-slideDown">
+                  <label className="label">Repeat Interval</label>
+                  <select className="input cursor-pointer" value={form.recurringType} onChange={set('recurringType')}>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Note Input */}
+          <div>
+            <label className="label">Note <span className="normal-case text-gray-500">(optional)</span></label>
+            <textarea
+              className="input resize-none"
+              rows={3}
+              placeholder="Add details, tags, or reminders..."
+              value={form.note}
+              onChange={set('note')}
+            />
+          </div>
+
+          {/* Submit Action */}
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-3.5 rounded-xl text-white font-bold text-sm active:scale-[0.98] transition-all hover:opacity-95 shadow-md ${
+              form.type === 'income'
+                ? 'gradient-green'
+                : form.type === 'transfer'
+                  ? 'gradient-blue'
+                  : 'gradient-blue'
+            }`}
+          >
+            {loading ? 'Saving...' : isEditing ? 'Update Transaction' : 'Save Transaction'}
+          </button>
+        </form>
       </div>
     </div>
   )
