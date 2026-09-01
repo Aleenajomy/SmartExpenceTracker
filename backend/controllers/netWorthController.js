@@ -149,10 +149,7 @@ const getNetWorth = async (req, res) => {
     }, { inHand: 0, bank: 0, investment: 0 });
 
     const accountBalances = calculateBalances(transactions);
-    const cashBalance = (accountBalances.cashBalance || 0) +
-                        (accountBalances.upiBalance || 0) +
-                        (accountBalances.debitCardBalance || 0) +
-                        (accountBalances.netBankingBalance || 0);
+    const liquidBalance = accountBalances.totalBalance;
 
     res.json({
       success: true,
@@ -160,15 +157,15 @@ const getNetWorth = async (req, res) => {
       outstandingLoans,
       outstandingEMIs,
       totalLiabilities,
-      cashBalance,
+      cashBalance: liquidBalance,
       ledgerReceivable,
       ledgerPayable,
-      netWorth: totalAssets + cashBalance + ledgerReceivable - totalLiabilities,
-      cashInHand: accountBalances.cashBalance || breakdown.inHand,
-      bankBalance: (accountBalances.debitCardBalance + accountBalances.netBankingBalance) || breakdown.bank,
+      netWorth: totalAssets + liquidBalance + ledgerReceivable - totalLiabilities,
+      cashInHand: accountBalances.cashBalance,
+      bankBalance: accountBalances.bankBalance,
       walletBalance: accountBalances.upiBalance,
       totalBalance: accountBalances.totalBalance,
-      creditCardDue: accountBalances.creditCardDue,
+      creditCardDue: accountBalances.creditCardBalance < 0 ? Math.abs(accountBalances.creditCardBalance) : 0,
       investmentBalance: breakdown.investment,
       assets,
       liabilities: mappedLiabilities,

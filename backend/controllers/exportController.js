@@ -117,4 +117,30 @@ const exportPDF = async (req, res) => {
   }
 };
 
-module.exports = { exportPDF };
+const exportCSV = async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: User is not authenticated' });
+    }
+    const expenses = await getExportData(req.user.id, req.query);
+    const headers = ['Date', 'Title', 'Category', 'Type', 'Account/Payment', 'Amount', 'Note'];
+    const rows = expenses.map(e => [
+      e.expenseDate ? e.expenseDate.toISOString().slice(0, 10) : '',
+      `"${(e.title || '').replace(/"/g, '""')}"`,
+      `"${(e.category || '').replace(/"/g, '""')}"`,
+      e.type,
+      `"${(e.accountType || e.paymentMethod || '').replace(/"/g, '""')}"`,
+      e.amount,
+      `"${(e.note || '').replace(/"/g, '""')}"`,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="transactions-${Date.now()}.csv"`);
+    res.send(csvContent);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { exportPDF, exportCSV };
