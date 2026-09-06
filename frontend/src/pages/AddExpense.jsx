@@ -24,8 +24,8 @@ const accountTypeForPayment = (paymentMethod) => {
   if (m === 'credit card') return 'Credit Card'
   if (m === 'upi' || m === 'wallet') return 'UPI'
   if (m === 'debit card') return 'Debit Card'
-  if (m === 'net banking' || m === 'bank' || m === 'bank transfer') return 'Bank'
-  return 'Bank'
+  if (m === 'net banking' || m === 'bank' || m === 'bank transfer') return 'Net Banking'
+  return 'UPI'
 }
 
 const defaultForm = {
@@ -33,10 +33,10 @@ const defaultForm = {
   amount: '',
   category: CATEGORIES[0],
   type: 'expense',
-  accountType: 'Bank',
+  accountType: 'UPI',
   fromAccountType: 'Bank',
   toAccountType: 'Cash',
-  paymentMethod: 'Bank',
+  paymentMethod: 'UPI',
   note: '',
   expenseDate: today,
   recurring: false,
@@ -124,15 +124,26 @@ export default function AddExpense() {
   const handleTypeChange = (type) => {
     const cats = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
     const newCategory = type === 'transfer' ? 'Transfer' : cats[0]
-    setForm(prev => ({
-      ...prev,
-      type,
-      category: newCategory,
-      title: type === 'income' && !customizeTitle && newCategory !== 'Other'
-        ? newCategory
-        : (type === 'transfer' && !customizeTitle ? `Transfer ${prev.fromAccountType} to ${prev.toAccountType}` : prev.title),
-      recurring: type === 'expense' ? prev.recurring : false,
-    }))
+    setForm(prev => {
+      const nextPayment = type === 'transfer'
+        ? 'Transfer'
+        : (prev.paymentMethod === 'Bank' || prev.paymentMethod === 'Transfer' ? 'UPI' : prev.paymentMethod || 'UPI')
+      const nextAccount = type === 'transfer'
+        ? prev.fromAccountType || 'Bank'
+        : accountTypeForPayment(nextPayment)
+
+      return {
+        ...prev,
+        type,
+        category: newCategory,
+        paymentMethod: nextPayment,
+        accountType: nextAccount,
+        title: type === 'income' && !customizeTitle && newCategory !== 'Other'
+          ? newCategory
+          : (type === 'transfer' && !customizeTitle ? `Transfer ${prev.fromAccountType} to ${prev.toAccountType}` : prev.title),
+        recurring: type === 'expense' ? prev.recurring : false,
+      }
+    })
     if (type === 'expense') {
       setCustomizeTitle(false)
     }
