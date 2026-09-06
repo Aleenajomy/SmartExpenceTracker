@@ -14,3 +14,8 @@ pnpm-debug.log*
 Thumbs.db
 dev-dist/
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+.cache/

@@ -30,12 +30,12 @@ api.interceptors.response.use(
   err => {
     const status = err.response?.status
     const url = err.config?.url || ''
-    // Only auto-redirect to /login for 401s on protected endpoints,
-    // NOT on the auth endpoints themselves (login/register/forgot-password)
-    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/forgot-password')
+    // Only auto-redirect to /#/login for 401s on protected endpoints,
+    // NOT on the auth endpoints themselves (login/register/forgot-password/me)
+    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/forgot-password') || url.includes('/auth/me')
     if (status === 401 && !isAuthEndpoint) {
       localStorage.removeItem('token')
-      window.location.href = '/login'
+      window.location.href = '/#/login'
     }
     const rejectError = new Error(err.response?.data?.message || err.message || 'Something went wrong')
     if (err.response) {
